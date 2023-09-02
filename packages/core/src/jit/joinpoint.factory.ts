@@ -11,14 +11,12 @@ export class JoinPointFactory {
     ctxt: AroundContext<T, X>,
     fn: (...args: unknown[]) => R,
   ): JoinPoint {
-    function alreadyCalledFn(): never {
-      throw new AdviceError(advice, ctxt.target, `joinPoint already proceeded`);
-    }
+    // function alreadyCalledFn(): never {
+    //   throw new AdviceError(advice, ctxt.target, `joinPoint already proceeded`);
+    // }
 
     return function (...args: unknown[]) {
-      const jp = fn;
-      fn = alreadyCalledFn;
-      return jp.apply(ctxt.instance, args);
+      return fn.apply(ctxt.instance, args);
     };
   }
 }

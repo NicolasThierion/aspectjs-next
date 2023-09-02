@@ -4,6 +4,7 @@ import { JitWeaverCanvasStrategy } from './jit-canvas.strategy';
 import {
   MethodPropertyDescriptor,
   assert,
+  defineMetadata,
   getMetadata,
 } from '@aspectjs/common/utils';
 import { AdviceType } from '../../advice/advice-type.type';
@@ -14,6 +15,8 @@ import { AdvicesSelection } from '../../advice/registry/advices-selection.model'
 import { CompiledSymbol } from '../../weaver/canvas/canvas-strategy.type';
 import type { WeaverContext } from '../../weaver/context/weaver.context';
 import { renameFunction } from './canvas.utils';
+import { CompileAdviceEntry } from '../../advice/registry/compile-advice-entry.model';
+import { AdviceError } from '../../errors/advice.error';
 
 /**
  * Canvas to advise method and parameters
@@ -42,6 +45,9 @@ export abstract class AbstractJitMethodCanvasStrategy<
       ) as CompiledSymbol<T, X>;
     }
 
+    // if another @Compile advice has been applied
+    // replace wrapped method by original method before it gets wrapped again
+
     let methodDescriptor = getMetadata(
       '@aspectjs:jitMethodCanvas',
       ctxt.target.proto,
@@ -53,14 +59,41 @@ export abstract class AbstractJitMethodCanvasStrategy<
         ) as CompiledSymbol<T, X>,
       true,
     );
+    (adviceEntries as CompileAdviceEntry<T, X, AdviceType.COMPILE>[])
+      .filter((e) => !e.called)
+      .forEach((entry) => {
+        assert(typeof entry.advice === 'function');
+        Object.defineProperty(
+          ctxt.target.proto,
+          ctxt.target.propertyKey,
+          methodDescriptor,
+        );
 
-    adviceEntries.forEach((entry) => {
-      assert(typeof entry === 'function');
-      methodDescriptor = (entry.advice.call(
-        entry.aspect,
-        ctxt.asCompileContext(),
-      ) ?? methodDescriptor) as CompiledSymbol<T, X>;
-    });
+        methodDescriptor = (entry.advice.call(
+          entry.aspect,
+          ctxt.asCompileContext(),
+        ) ?? methodDescriptor) as CompiledSymbol<T, X>;
+
+        if (typeof methodDescriptor === 'function') {
+          const surrogate = {
+            fn: methodDescriptor,
+          };
+          methodDescriptor = Object.getOwnPropertyDescriptor(
+            surrogate,
+            'fn',
+          )! as CompiledSymbol<T, X>;
+        }
+
+        if (typeof methodDescriptor.value !== 'function') {
+          throw new AdviceError(
+            entry.advice,
+            ctxt.target,
+            'should return void, a function, or a Method property descriptor',
+          );
+        }
+
+        entry.called = true;
+      });
     return methodDescriptor;
   }
 
@@ -79,11 +112,16 @@ export abstract class AbstractJitMethodCanvasStrategy<
     compiledSymbol: MethodPropertyDescriptor,
     joinpoint: (...args: any[]) => unknown,
   ): CompiledSymbol<T, X> {
-    return wrapMethodDescriptor(
-      ctxt,
+    compiledSymbol = wrapMethodDescriptor(ctxt, compiledSymbol, joinpoint);
+
+    defineMetadata(
+      '@aspectjs:jitMethodCanvas',
       compiledSymbol,
-      joinpoint,
-    ) as CompiledSymbol<T, X>;
+      ctxt.target.proto,
+      ctxt.target.propertyKey,
+    );
+
+    return compiledSymbol as CompiledSymbol<T, X>;
   }
 }
 

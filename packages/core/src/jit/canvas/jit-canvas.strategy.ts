@@ -135,6 +135,8 @@ export abstract class JitWeaverCanvasStrategy<
     let jp = aroundContext.joinpoint;
     const jpFactory = this.weaverContext.get(JoinPointFactory);
     advices.reverse().forEach((entry) => {
+      // TODO: remove
+      console.log(advices);
       const originalJp = jp;
       const nextJp = jpFactory.create(
         entry.advice,

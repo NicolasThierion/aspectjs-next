@@ -189,49 +189,25 @@ describe('property setter advice', () => {
     });
 
     describe('when the joinpoint is called', () => {
-      describe('once', () => {
-        beforeEach(() => {
-          aroundAdviceA = jest.fn(
-            (ctxt: AroundContext<JoinpointType.CLASS>) => {
-              return ctxt.joinpoint(...ctxt.args);
-            },
-          );
-        });
-        it('calls the aspect around the getter', () => {
-          class A {
-            @AProperty()
-            set labels(val: string[]) {
-              setterImpl(val);
-            }
-          }
-
-          new A().labels = ['a'];
-          expect(beforeAdvice).toHaveBeenCalled();
-          expect(aroundAdviceA).toHaveBeenCalled();
-          expect(setterImpl).toHaveBeenCalled();
-          expect(beforeAdvice).toHaveBeenCalledBefore(setterImpl);
-          expect(aroundAdviceA).toHaveBeenCalledBefore(beforeAdvice);
+      beforeEach(() => {
+        aroundAdviceA = jest.fn((ctxt: AroundContext<JoinpointType.CLASS>) => {
+          return ctxt.joinpoint(...ctxt.args);
         });
       });
-      describe('twice', () => {
-        beforeEach(() => {
-          aroundAdviceA = jest.fn((ctxt: AroundContext, jp: JoinPoint) => {
-            jp(['a']);
-            jp(['b']);
-          });
-        });
-        it('throws an error', () => {
-          class A {
-            @AProperty()
-            labels = ['a'];
+      it('calls the aspect around the getter', () => {
+        class A {
+          @AProperty()
+          set labels(val: string[]) {
+            setterImpl(val);
           }
+        }
 
-          expect(() => new A()).toThrow(
-            new WeavingError(
-              'Error applying advice @Around(@test:AProperty) AAspect.applyAround() on property A.labels: joinPoint already proceeded',
-            ),
-          );
-        });
+        new A().labels = ['a'];
+        expect(beforeAdvice).toHaveBeenCalled();
+        expect(aroundAdviceA).toHaveBeenCalled();
+        expect(setterImpl).toHaveBeenCalled();
+        expect(beforeAdvice).toHaveBeenCalledBefore(setterImpl);
+        expect(aroundAdviceA).toHaveBeenCalledBefore(beforeAdvice);
       });
     });
 

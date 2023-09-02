@@ -1,4 +1,9 @@
-import { assert, ConstructorType, getMetadata } from '@aspectjs/common/utils';
+import {
+  assert,
+  ConstructorType,
+  defineMetadata,
+  getMetadata,
+} from '@aspectjs/common/utils';
 import { AdviceEntry } from './../../advice/registry/advice-entry.model';
 
 import { JoinpointType } from './../../pointcut/pointcut-target.type';
@@ -10,6 +15,8 @@ import { CompiledSymbol } from '../../weaver/canvas/canvas-strategy.type';
 import type { WeaverContext } from '../../weaver/context/weaver.context';
 import { MutableAdviceContext } from './../../advice/mutable-advice.context';
 import { renameFunction } from './canvas.utils';
+import { AdviceError } from '../../errors/advice.error';
+import { CompileAdviceEntry } from '../../advice/registry/compile-advice-entry.model';
 
 /**
  * Canvas to advise classes
@@ -43,11 +50,31 @@ export class JitClassCanvasStrategy<
       return constructor;
     }
 
-    adviceEntries.forEach((entry) => {
-      assert(typeof entry === 'function');
-      constructor = (entry.advice.call(entry.aspect, ctxt.asCompileContext()) ??
-        constructor) as ConstructorType<X>;
-    });
+    (
+      adviceEntries as CompileAdviceEntry<
+        JoinpointType.CLASS,
+        X,
+        AdviceType.COMPILE
+      >[]
+    )
+      .filter((e) => !e.called)
+      .forEach((entry) => {
+        assert(typeof entry.advice === 'function');
+        ctxt.target.proto.constructor = constructor;
+
+        constructor = (entry.advice.call(
+          entry.aspect,
+          ctxt.asCompileContext(),
+        ) ?? constructor) as ConstructorType<X>;
+        if (typeof constructor !== 'function') {
+          throw new AdviceError(
+            entry.advice,
+            ctxt.target,
+            'should return void or a class constructor',
+          );
+        }
+        entry.called = true;
+      });
     return constructor;
   }
 
@@ -75,6 +102,11 @@ export class JitClassCanvasStrategy<
     joinpoint: (...args: any[]) => unknown,
   ): ConstructorType<X> {
     assert(!!ctxt.target?.proto);
+    defineMetadata(
+      '@aspectjs:jitClassCanvas',
+      compiledConstructor,
+      ctxt.target.proto,
+    );
     const ctorName = compiledConstructor.name;
 
     joinpoint = renameFunction(
